@@ -1,0 +1,13 @@
+feature,coefficient
+WWTP_Count,0.0010953764124422506
+Urbanization_Percent,0.0010185091414763778
+Interstate_Mileage_mi,0.0008570088783241747
+Agricultural_Land_Percent,0.0008145685122282314
+Population_Density_per_sq_mi,0.00012423484754761892
+Biosolids_Application_Sites,0.00011529233402220752
+WWTP_Total_Treatment_Capacity_MGD,-7.670048121774033e-05
+Road_Density_mi_per_sq_mi,4.535332809000042e-05
+Livestock_Density_per_sq_mi,1.0473442576414308e-05
+Population,-2.033106997448146e-08
+Irrigated_Land_Acres,1.9766273040021752e-09
+intercept,0.00967429713771567
