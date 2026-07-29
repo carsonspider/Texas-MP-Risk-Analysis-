@@ -10,7 +10,22 @@ import pandas as pd
 
 OUT_DIR = Path(__file__).resolve().parent
 FIG_DIR = OUT_DIR / "figures"
+DATA_PATH = OUT_DIR / "ML_Ready_Sheet - ML_Ready_Sheet.csv"
 TARGET_COL = "My_Composite_Risk_Score"
+
+FEATURE_COLS = [
+    "Agricultural_Land_Percent",
+    "Livestock_Density_per_sq_mi",
+    "Irrigated_Land_Acres",
+    "Interstate_Mileage_mi",
+    "Road_Density_mi_per_sq_mi",
+    "Biosolids_Application_Sites",
+    "WWTP_Count",
+    "WWTP_Total_Treatment_Capacity_MGD",
+    "Population",
+    "Population_Density_per_sq_mi",
+    "Urbanization_Percent",
+]
 
 #  axis labels for long CSV column names
 FEATURE_LABELS = {
@@ -314,6 +329,95 @@ def chart_residuals(pred: pd.DataFrame) -> alt.Chart:
     return alt.hconcat(residual_scatter, hist, spacing=28).resolve_scale(color="independent")
 
 
+def chart_correlation_heatmap() -> alt.Chart:
+    """Pearson correlation heatmap of model features (multicollinearity check)."""
+    raw = pd.read_csv(DATA_PATH)
+    X = raw[FEATURE_COLS].apply(pd.to_numeric, errors="coerce")
+    # Median-fill so every county contributes (same idea as the model pipeline)
+    X = X.fillna(X.median(numeric_only=True))
+
+    corr = X.corr(method="pearson")
+    labels = [FEATURE_LABELS.get(c, c) for c in FEATURE_COLS]
+    corr.index = labels
+    corr.columns = labels
+
+    # Long form for Altair; keep feature order for a readable matrix
+    long = (
+        corr.reset_index(names="feature_y")
+        .melt(id_vars="feature_y", var_name="feature_x", value_name="correlation")
+    )
+    long["feature_x"] = pd.Categorical(long["feature_x"], categories=labels, ordered=True)
+    long["feature_y"] = pd.Categorical(long["feature_y"], categories=labels, ordered=True)
+    # Text on cells with |r| high enough to read; skip near-zero clutter
+    long["label"] = long["correlation"].apply(
+        lambda r: f"{r:.2f}" if abs(r) >= 0.35 else ""
+    )
+
+    # Also export the numeric matrix for tables / papers
+    corr_path = OUT_DIR / "lr_feature_correlations.csv"
+    corr.to_csv(corr_path)
+    print(f"  Wrote {corr_path.relative_to(OUT_DIR)}")
+
+    heat = (
+        alt.Chart(long)
+        .mark_rect(stroke=COLORS["panel"], strokeWidth=1)
+        .encode(
+            x=alt.X(
+                "feature_x:N",
+                title=None,
+                sort=labels,
+                axis=alt.Axis(labelAngle=-40, labelLimit=140),
+            ),
+            y=alt.Y(
+                "feature_y:N",
+                title=None,
+                sort=labels,
+                axis=alt.Axis(labelLimit=140),
+            ),
+            color=alt.Color(
+                "correlation:Q",
+                title="Pearson r",
+                scale=alt.Scale(
+                    domain=[-1, 0, 1],
+                    range=[COLORS["negative"], "#F4F5F6", COLORS["positive"]],
+                ),
+                legend=alt.Legend(orient="right", gradientLength=160),
+            ),
+            tooltip=[
+                alt.Tooltip("feature_x:N", title="Feature X"),
+                alt.Tooltip("feature_y:N", title="Feature Y"),
+                alt.Tooltip("correlation:Q", title="r", format=".3f"),
+            ],
+        )
+    )
+
+    text = (
+        alt.Chart(long)
+        .mark_text(fontSize=9, fontWeight=500)
+        .encode(
+            x=alt.X("feature_x:N", sort=labels),
+            y=alt.Y("feature_y:N", sort=labels),
+            text="label:N",
+            color=alt.condition(
+                "abs(datum.correlation) > 0.65",
+                alt.value("#FFFFFF"),
+                alt.value(COLORS["text"]),
+            ),
+        )
+    )
+
+    return (
+        (heat + text)
+        .properties(
+            width=420,
+            height=420,
+            title={
+                "text": "Feature correlation heatmap",
+            },
+        )
+    )
+
+
 def save_chart(chart: alt.Chart, stem: str) -> None:
     """Save chart as PDF."""
     FIG_DIR.mkdir(exist_ok=True)
@@ -328,16 +432,19 @@ def main() -> None:
     coef_chart = chart_standardized_coefficients(coef)
     scatter_chart = chart_predicted_vs_actual(pred, metrics)
     resid_chart = chart_residuals(pred)
+    corr_chart = chart_correlation_heatmap()
 
     save_chart(coef_chart, "coef_standardized")
     save_chart(scatter_chart, "predicted_vs_actual")
     save_chart(resid_chart, "residuals")
+    save_chart(corr_chart, "correlation_heatmap")
 
     dashboard = (
         alt.vconcat(
             coef_chart,
             scatter_chart,
             resid_chart,
+            corr_chart,
             spacing=36,
         )
         .properties(
