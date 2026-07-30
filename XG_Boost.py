@@ -1,8 +1,15 @@
+'''
+exports feature importance weight and gain (png plots)
+csv of R^2, RMSE, MAE
+
+'''
+
 import pandas as panda
 import matplotlib.pyplot as plt
 import numpy as np
 import sklearn
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import root_mean_squared_error
 from sklearn.pipeline import Pipeline
 from category_encoders.target_encoder import TargetEncoder 
 from xgboost import XGBRegressor, plot_importance
@@ -10,6 +17,7 @@ from xgboost import XGBRegressor, plot_importance
 #XGBClassifier for yes/ no categories 
 #plot importance for feature importance 
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+import altair as alt
 
 
 #dataset
@@ -66,20 +74,62 @@ model.fit(X_train, Y_train)
 pred = model.predict(X_test)
 #runs the model again with the remaining 20% X test data, never seen 
 
-
+#---------
 #evaluate accuracy 
-print("R2 Score: ", r2_score(Y_test, pred))
-print("Mean Squared Error: ", mean_squared_error(Y_test, pred))
-print("Mean Absolute Error: ", mean_absolute_error(Y_test, pred))   
+r2 = r2_score(Y_test, pred)
+rmse = root_mean_squared_error(Y_test, pred)
+mae = mean_absolute_error(Y_test, pred)
 
+print("R2 Score: ", r2)
+print("Root Mean Squared Error: ", rmse)
+print("Mean Absolute Error: ", mae)
+
+results = panda.DataFrame({
+    "Metric": ["R2", "RMSE", "MAE"],
+    "Value": [r2, rmse, mae]
+})
+
+results.to_csv('/Users/juliettecarson/Desktop/HIRES Research/XG_Boost_Results.csv', index=False)
+
+#---------
+#FEATURE IMPORTANCE WEIGHT
+plt.figure(figsize=(10, 8))
 # Plot weight-based feature importance, built in
 plot_importance(model, importance_type='weight')
 # weight: the number of times a feature is used to split the data across all trees
+plt.title("Feature Importance (Weight)")
+plt.xlabel("Feature Importance")
+plt.ylabel("Features")
+plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_feature_importance_weight.png')
 plt.show()
-plt.savefig('feature_importance.png')
 
+#FEATURE IMPORTANCE WEIGHT
+plt.figure(figsize=(10, 8))
 plot_importance(model, importance_type='gain')
+plt.title("Feature Importance (Gain)")
+plt.xlabel("Feature Importance")
+plt.ylabel("Features")
+plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_feature_importance_gain.png')
+plt.show()
 #average improvement in accuracy each time that feature is used to split
+
+#-----
+#plot residuals v predicted 
+residuals = Y_test - pred
+plt.figure(figsize=(10, 8))
+plt.scatter(pred, residuals)
+plt.xlabel("Predicted Values")
+plt.ylabel("Residuals")
+plt.title("Residual Plot")
+plt.axhline(y=0, color='r', linestyle='--')
+plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_residue_plot.png')
 plt.show()
 
-
+#residual distribution
+plt.figure(figsize=(10, 8))
+plt.hist(residuals, bins=30)
+plt.xlabel("Residuals")
+plt.ylabel("Frequency")
+plt.title("Residual Distribution")
+plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_residue_distribution.png')
+plt.show()
