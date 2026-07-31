@@ -168,12 +168,20 @@ importance_df.to_csv('/Users/juliettecarson/Desktop/HIRES Research/ML/feature_im
 weighted_feature_matrix = panda.DataFrame(index=df.index)
 for feature in FEATURE_COLS:
     feature_weight = importance_df.loc[importance_df['Feature'] == feature, 'Gain_Importance_Normalized'].iloc[0]
-    weighted_feature_matrix[f'{feature}_Weighted'] = df[feature].fillna(df[feature].median()) * feature_weight
+    feature_values = df[feature].fillna(df[feature].median())
+    feature_min = feature_values.min()
+    feature_max = feature_values.max()
+    feature_norm = (feature_values - feature_min) / (feature_max - feature_min) if feature_max > feature_min else 0
+    weighted_feature_matrix[f'{feature}_Weighted'] = feature_norm * feature_weight
 
 weighted_export = panda.concat([
     df[['County', 'FIPS']].copy(),
     weighted_feature_matrix
 ], axis=1)
+weighted_export['Weighted_Final_Score'] = weighted_feature_matrix.sum(axis=1)
+weighted_export['Weighted_Final_Score_Normalized'] = (
+    weighted_export['Weighted_Final_Score'] - weighted_export['Weighted_Final_Score'].min()
+) / (weighted_export['Weighted_Final_Score'].max() - weighted_export['Weighted_Final_Score'].min()) if weighted_export['Weighted_Final_Score'].max() > weighted_export['Weighted_Final_Score'].min() else 0
 
 # ----  feature-level gain importance into pathway indices ----
 groups = {
