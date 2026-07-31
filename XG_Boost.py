@@ -4,6 +4,7 @@ csv of R^2, RMSE, MAE
 
 '''
 
+import os
 import pandas as panda
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,8 +22,7 @@ import altair as alt
 
 
 #dataset
-df = panda.read_csv('ML_Ready_Sheet.csv', delimiter=',')
-#XGBoost natively handles NaNs
+df = panda.read_csv('/Users/juliettecarson/Desktop/HIRES Research/ML/ML_Ready_Sheet.csv', delimiter=',')
 
 # clear dataset (drop flood freq bc empty)
 FEATURE_COLS = [
@@ -42,11 +42,23 @@ FEATURE_COLS = [
 # Target (Y) —  composite risk score to predict
 TARGET_COL = "My_Composite_Risk_Score"
 
+
 print(df.head())
 
 X = df[FEATURE_COLS].copy() #copy to avoid modifying original
-Y = df[TARGET_COL].copy()
 
+# Impute missing values before modeling so feature columns are complete and consistent
+missing_before = X.isnull().sum()
+print("Missing values before imputation:")
+print(missing_before[missing_before > 0])
+
+X = X.fillna(X.median(numeric_only=True))
+X = X.fillna(0)
+
+print("Missing values after imputation:")
+print(X.isnull().sum().sum())
+
+Y = df[TARGET_COL].copy()
 
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
 # 80% for training, 20% for testing
@@ -97,7 +109,7 @@ plt.figure(figsize=(10, 8))
 # Plot weight-based feature importance, built in
 plot_importance(model, importance_type='weight')
 # weight: the number of times a feature is used to split the data across all trees
-plt.title("Feature Importance (Weight)")
+plt.title("Feature Importance XG Boosting (Weight)")
 plt.xlabel("Feature Importance")
 plt.ylabel("Features")
 plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_feature_importance_weight.png')
@@ -106,7 +118,7 @@ plt.show()
 #FEATURE IMPORTANCE WEIGHT
 plt.figure(figsize=(10, 8))
 plot_importance(model, importance_type='gain')
-plt.title("Feature Importance (Gain)")
+plt.title("Feature Importance XG Boosting (Gain)")
 plt.xlabel("Feature Importance")
 plt.ylabel("Features")
 plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_feature_importance_gain.png')
@@ -133,3 +145,66 @@ plt.ylabel("Frequency")
 plt.title("Residual Distribution")
 plt.savefig('/Users/juliettecarson/Desktop/HIRES Research/ML/figures/XG_Boosting_residue_distribution.png')
 plt.show()
+
+#----- 
+# export gain-based importance for calibrated heat map
+raw_gain_importance = model.get_booster().get_score(importance_type='gain')
+
+# normalize to sum to 1 
+gain_importance_series = panda.Series(raw_gain_importance)
+gain_importance_series = gain_importance_series.reindex(FEATURE_COLS, fill_value=0)
+normalized_gain = gain_importance_series / gain_importance_series.sum()
+
+importance_df = panda.DataFrame({
+    "Feature": FEATURE_COLS,
+    "Gain_Importance": gain_importance_series.values,
+    "Gain_Importance_Normalized": normalized_gain.values,
+    "Gain_Importance_Normalized_Percent": normalized_gain.values * 100
+})
+
+importance_df.to_csv('/Users/juliettecarson/Desktop/HIRES Research/ML/feature_importance.csv', index=False)
+
+
+weighted_feature_matrix = panda.DataFrame(index=df.index)
+for feature in FEATURE_COLS:
+    feature_weight = importance_df.loc[importance_df['Feature'] == feature, 'Gain_Importance_Normalized'].iloc[0]
+    weighted_feature_matrix[f'{feature}_Weighted'] = df[feature].fillna(df[feature].median()) * feature_weight
+
+weighted_export = panda.concat([
+    df[['County', 'FIPS']].copy(),
+    weighted_feature_matrix
+], axis=1)
+
+# ----  feature-level gain importance into pathway indices ----
+groups = {
+    'Agriculture_Index': ['Agricultural_Land_Percent','Livestock_Density_per_sq_mi','Irrigated_Land_Acres'],
+    'Wastewater_Index': ['Biosolids_Application_Sites','WWTP_Count','WWTP_Total_Treatment_Capacity_MGD'],
+    'Transportation_Index': ['Interstate_Mileage_mi','Road_Density_mi_per_sq_mi'],
+    'Demographics_Index': ['Population','Population_Density_per_sq_mi','Urbanization_Percent']
+}
+
+imp = importance_df.set_index('Feature')['Gain_Importance_Normalized']
+
+group_weights = {k: imp[cols].sum() for k, cols in groups.items()}
+total = sum(group_weights.values())
+group_weights = {k: v/total for k, v in group_weights.items()}
+
+print("ML-derived index weights:")
+for k, v in group_weights.items():
+    print(f"  {k}: {v:.3f} ({v*100:.1f}%)")
+
+# ----  weighted composite to  254 counties ----
+df['ML_Weighted_Composite'] = (
+    df['Agriculture_Index'].fillna(0)    * group_weights['Agriculture_Index'] +
+    df['Wastewater_Index'].fillna(0)     * group_weights['Wastewater_Index'] +
+    df['Transportation_Index'].fillna(0) * group_weights['Transportation_Index'] +
+    df['Demographics_Index'].fillna(0)   * group_weights['Demographics_Index']
+)
+
+# ---- export for QGIS----
+OUTPUT_DIR = '/Users/juliettecarson/Desktop/HIRES Research/ML/outputs'
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+weighted_export.to_csv(os.path.join(OUTPUT_DIR, 'Weighted_X_Values.csv'), index=False)
+df.to_csv(os.path.join(OUTPUT_DIR, 'ML_Weighted_Composite.csv'), index=False)
+print(weighted_export[['County','FIPS'] + [c for c in weighted_export.columns if c.endswith('_Weighted')]].head())
+print(df[['County','FIPS','My_Composite_Risk_Score','ML_Weighted_Composite']].head())
