@@ -1,24 +1,17 @@
 """
 extract_curve_shape_features.py
 
-WHAT THIS DOES (simple version):
-Instead of looking at single points, this looks at the SHAPE of each
-sample's curve and pulls out a few numbers that describe that shape:
 
-1. Arc diameter (Nyquist) -- roughly how "big" the arc is, estimated as
+1. Arc diameter (Nyquist)  how "big" the arc is, estimated as
    (largest Re(Z) minus smallest Re(Z)) across the sweep. Bigger number =
-   bigger arc. This is a simple stand-in for "charge-transfer resistance."
+   bigger arc. 
 
-2. Low-frequency tail slope (Nyquist) -- at the lowest few frequencies,
+2. Low-frequency tail slope (Nyquist) at the lowest few frequencies,
    is the curve still curving, or does it go in a straight diagonal line?
    We fit a straight line to the last few points and report its slope.
 
-3. Bode transition point -- the frequency where |Z| first rises clearly
-   above its high-frequency "flat" value (the plateau). This marks where
-   the sample switches from "mostly resistive" to "mostly capacitive."
+3. Bode transition point 
 
-Then it calls the existing plot_nyquist_bode.py script so you get fresh
-Nyquist and Bode plots alongside these numbers.
 """
 
 import pandas as pd
@@ -28,7 +21,6 @@ import subprocess
 MASTER_FILE = "eis_master.csv"
 OUTPUT_FILE = "curve_shape_features.csv"
 
-# --- Adjustable settings ---
 N_LOW_FREQ_POINTS_FOR_SLOPE = 5   # how many of the lowest-frequency points to use for the tail slope
 N_HIGH_FREQ_POINTS_FOR_PLATEAU = 5  # how many of the highest-frequency points define the "flat" baseline
 TRANSITION_THRESHOLD = 1.5        # transition = where |Z| exceeds this multiple of the plateau
@@ -43,10 +35,8 @@ for sample_id, group in df.groupby("Sample_ID"):
 
     sorted_by_freq = group.sort_values("Frequency_Hz")  # ascending: lowest freq first
 
-    # --- 1. Arc diameter ---
     arc_diameter = sorted_by_freq["Re_Z_ohm"].max() - sorted_by_freq["Re_Z_ohm"].min()
 
-    # --- 2. Low-frequency tail slope ---
     tail_points = sorted_by_freq.head(N_LOW_FREQ_POINTS_FOR_SLOPE)
     x = tail_points["Re_Z_ohm"].values
     y = -tail_points["Im_Z_ohm"].values  # standard Nyquist convention
@@ -55,7 +45,6 @@ for sample_id, group in df.groupby("Sample_ID"):
     else:
         slope = np.nan
 
-    # --- 3. Bode transition point ---
     high_freq_points = sorted_by_freq.tail(N_HIGH_FREQ_POINTS_FOR_PLATEAU)  # highest frequencies
     plateau_value = high_freq_points["Z_mag_ohm"].mean()
 
