@@ -1,14 +1,11 @@
 """
 extract_features_by_frequency.py
 
-WHAT THIS DOES (simple version):
-For every sample, look at three frequency checkpoints (high, mid, low --
-you can change the numbers below). At each checkpoint, grab three values:
+
+For every sample, look at three frequency checkpoints 
 Re(Z), |Z|, and Phase. Put it all in one table so you can compare samples
 side by side at the same frequencies.
 
-This replaces the older "compare_by_concentration.py" but now grabs
-Re(Z) and Phase too, not just |Z|.
 """
 
 import pandas as pd
@@ -16,7 +13,6 @@ import pandas as pd
 MASTER_FILE = "eis_master.csv"
 OUTPUT_FILE = "features_by_frequency.csv"
 
-# --- Adjustable frequency checkpoints (change these anytime) ---
 HIGH_FREQ_HZ = 50000
 MID_FREQ_HZ = 1000
 LOW_FREQ_HZ = 1
